@@ -11,7 +11,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   html, body { width: 100%; height: 100%; overflow: hidden; position: fixed; }
   body {
-    background: linear-gradient(180deg, #BDE8FF 0%, #DFF3FF 55%, #FFF6E5 100%);
+    background: linear-gradient(180deg, #DFEDF6 0%, #F2EFE9 58%, #FAF1E5 100%);
     font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
     cursor: pointer;
     touch-action: none;
@@ -21,7 +21,7 @@
   /* 天上的云朵装饰 */
   .cloud {
     position: absolute;
-    background: rgba(255,255,255,.85);
+    background: rgba(255,255,255,.7);
     border-radius: 100px;
     pointer-events: none;
     z-index: 1;
@@ -36,7 +36,7 @@
   /* 地上的草地 */
   #ground {
     position: fixed; bottom: 0; left: 0; width: 100%; height: 12vh;
-    background: linear-gradient(180deg, #9FE07A 0%, #7EC855 100%);
+    background: linear-gradient(180deg, #C4E3B2 0%, #ABD29B 100%);
     z-index: 2;
   }
 
@@ -126,6 +126,56 @@
   #scorePill.bump { animation: bump .35s ease-out; }
   @keyframes bump { 40% { transform: scale(1.3); } }
 
+  /* 暂停时冻结所有动画 */
+  body.paused * { animation-play-state: paused !important; }
+
+  /* 暂停遮罩 */
+  #pauseOverlay {
+    position: fixed; inset: 0; z-index: 15;
+    background: rgba(250,247,242,.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    cursor: pointer;
+  }
+  #pauseOverlay .big { font-size: clamp(60px, 14vw, 100px); animation: bob 1.8s ease-in-out infinite; }
+  #pauseOverlay p { font-size: clamp(22px, 4.5vw, 30px); color: #7A6A55; font-weight: 700; }
+
+  /* 结算页 */
+  #endOverlay {
+    position: fixed; inset: 0; z-index: 45;
+    background: rgba(250,247,242,.88);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #endOverlay .card {
+    background: rgba(255,255,255,.94);
+    border-radius: 36px;
+    padding: clamp(28px, 6vw, 48px) clamp(36px, 8vw, 64px);
+    box-shadow: 0 14px 44px rgba(90,70,50,.10);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  #endOverlay h2 { font-size: clamp(32px, 7vw, 52px); color: #E88CA8; }
+  #endOverlay .stars { font-size: clamp(38px, 9vw, 62px); }
+  #endOverlay .num { font-size: clamp(26px, 5.5vw, 40px); color: #5A4632; font-weight: 800; }
+  #againBtn {
+    font-size: clamp(22px, 4.5vw, 28px) !important;
+    padding: 16px 44px !important;
+    background: #F9DCE6 !important;
+    color: #B25D7E !important;
+    border: none; border-radius: 999px; font-weight: 700; font-family: inherit;
+    box-shadow: 0 6px 16px rgba(232,140,168,.25);
+  }
+  #againBtn:active { transform: scale(.95); }
+
+  /* 小屏时顶栏紧凑一些 */
+  @media (max-width: 520px) {
+    #hud { gap: 8px; }
+    #hud .pill { font-size: 17px; padding: 8px 14px; }
+  }
+
   /* 开始遮罩 */
   #start {
     position: fixed; inset: 0; z-index: 50;
@@ -149,8 +199,25 @@
 
 <div id="hud">
   <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
+  <div class="pill" id="timerPill">⏱ <span id="timer">180</span></div>
+  <button class="pill" id="pauseBtn" title="暂停">⏸</button>
   <button class="pill" id="musicBtn" title="音乐开关">🎵 开</button>
   <button class="pill" id="fullscreenBtn" title="全屏">⛶ 全屏</button>
+</div>
+
+<div id="pauseOverlay">
+  <div class="big">⏸️</div>
+  <p>休息一下～</p>
+  <p>点这里继续玩</p>
+</div>
+
+<div id="endOverlay">
+  <div class="card">
+    <h2>时间到！</h2>
+    <div class="stars" id="endStars">⭐⭐⭐</div>
+    <div class="num">你戳了 <span id="finalScore">0</span> 个泡泡，真棒！</div>
+    <button class="pill" id="againBtn">▶ 再玩一次</button>
+  </div>
 </div>
 
 <div id="start">
@@ -190,6 +257,55 @@ document.getElementById('fullscreenBtn').addEventListener('pointerdown', () => {
   } else document.exitFullscreen();
 });
 
+// ---------- 暂停 ----------
+const pauseBtn = document.getElementById('pauseBtn');
+const pauseOverlay = document.getElementById('pauseOverlay');
+let paused = false, gameOver = false, timeLeft = 180;
+
+function setPaused(v) {
+  if (gameOver) return;
+  paused = v;
+  document.body.classList.toggle('paused', paused);
+  pauseOverlay.style.display = paused ? 'flex' : 'none';
+  pauseBtn.textContent = paused ? '▶' : '⏸';
+}
+pauseBtn.addEventListener('pointerdown', () => setPaused(!paused));
+pauseOverlay.addEventListener('pointerdown', () => setPaused(false));
+
+// ---------- 3 分钟倒计时 ----------
+const timerEl = document.getElementById('timer');
+function updateTimer() {
+  timerEl.textContent = timeLeft;
+}
+setInterval(() => {
+  if (!started || paused || gameOver || timeLeft <= 0) return;
+  timeLeft--;
+  updateTimer();
+  if (timeLeft <= 0) endGame();
+}, 1000);
+
+function endGame() {
+  gameOver = true;
+  document.body.classList.add('paused');   // 冻结所有泡泡
+  const stars = score >= 20 ? '⭐⭐⭐⭐⭐' : score >= 12 ? '⭐⭐⭐⭐' : score >= 6 ? '⭐⭐⭐' : score >= 2 ? '⭐⭐' : '⭐';
+  document.getElementById('endStars').textContent = stars;
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('endOverlay').style.display = 'flex';
+  pauseBtn.textContent = '⏸';
+}
+
+// 再玩一次
+document.getElementById('againBtn').addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  score = 0; scoreEl.textContent = '0';
+  timeLeft = 180; updateTimer();
+  document.querySelectorAll('.bubble').forEach(b => b.remove());
+  paused = false; gameOver = false;
+  document.body.classList.remove('paused');
+  pauseOverlay.style.display = 'none';
+  document.getElementById('endOverlay').style.display = 'none';
+});
+
 // ---------- 云朵 ----------
 function makeCloud() {
   const c = document.createElement('div');
@@ -215,7 +331,7 @@ const colors = [
 const praises = ['真棒！','哇～','好耶！','啵！','厉害！','嘻嘻','太棒啦','再来一个！'];
 
 function spawnBubble() {
-  if (document.hidden) return;
+  if (document.hidden || paused || gameOver) return;
   const b = document.createElement('div');
   b.className = 'bubble';
   // 泡泡大小跟着屏幕走，手机平板都好戳
@@ -284,7 +400,7 @@ function popBubble(b) {
 
 // 点空白处：冒涟漪 + 小泡泡 + 音效，怎么点都有反应
 document.addEventListener('pointerdown', e => {
-  if (!started) return;
+  if (!started || paused || gameOver) return;
   if (e.target.closest('#hud') || e.target.closest('#start')) return;
 
   // 涟漪
@@ -394,7 +510,7 @@ function startMusic() {
   if (!audioCtx) return;
   const STEP = 0.62;   // 每个音 0.62 秒，慢悠悠的
   musicTimer = setInterval(() => {
-    if (!musicOn || document.hidden) return;
+    if (!musicOn || document.hidden || paused || gameOver) return;
     // 旋律
     const n = melodyNotes[musicStep % melodyNotes.length];
     playMusicNote(noteFreq[n], 0.055, 1.4);
