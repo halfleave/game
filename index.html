@@ -18,6 +18,20 @@
     overscroll-behavior: none;
   }
 
+  /* 主题切换过渡 */
+  body { transition: background 1s ease; }
+  #ground { transition: background 1s ease; }
+
+  /* 主题 B：樱花花园 */
+  body.theme-b { background: linear-gradient(180deg, #F9E9F0 0%, #F4EDF7 58%, #FDF3EE 100%); }
+  body.theme-b #ground { background: linear-gradient(180deg, #F0D5DC 0%, #E7C3CF 100%); }
+  body.theme-b .cloud { background: rgba(255,255,255,.8); }
+
+  /* 主题 C：星夜 */
+  body.theme-c { background: linear-gradient(180deg, #3E4A6B 0%, #4C5578 60%, #6B6480 100%); }
+  body.theme-c #ground { background: linear-gradient(180deg, #3F5866 0%, #354A56 100%); }
+  body.theme-c .cloud { background: rgba(255,255,255,.16); }
+
   /* 天上的云朵装饰 */
   .cloud {
     position: absolute;
@@ -123,6 +137,19 @@
     border: none; font-family: inherit;
   }
   .pill:active { transform: scale(.94); }
+  /* 纯图标按钮 */
+  .iconBtn { display: inline-flex; align-items: center; justify-content: center; }
+  #musicBtn { position: relative; }
+  #musicBtn.off::after {          /* 音乐关闭时的斜线 */
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 62%; height: 3px; border-radius: 3px;
+    background: #C97B6B;
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+  #fullscreenBtn .ic { width: 22px; height: 22px; display: block; }
+  #fullscreenBtn .ic-compress { display: none; }
+  #fullscreenBtn.fs .ic-expand { display: none; }
+  #fullscreenBtn.fs .ic-compress { display: block; }
   #scorePill.bump { animation: bump .35s ease-out; }
   @keyframes bump { 40% { transform: scale(1.3); } }
 
@@ -193,16 +220,20 @@
   #start .demo { font-size: clamp(60px, 14vw, 100px); animation: bob 1.6s ease-in-out infinite; }
 </style>
 </head>
-<body>
+<body class="theme-c">
 
 <div id="ground"></div>
 
 <div id="hud">
   <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
-  <div class="pill" id="timerPill">⏱ <span id="timer">180</span></div>
-  <button class="pill" id="pauseBtn" title="暂停">⏸</button>
-  <button class="pill" id="musicBtn" title="音乐开关">🎵 开</button>
-  <button class="pill" id="fullscreenBtn" title="全屏">⛶ 全屏</button>
+  <div class="pill" id="timerPill">⏱ <span id="timer">120</span></div>
+  <button class="pill iconBtn" id="pauseBtn" title="暂停">⏸</button>
+  <button class="pill iconBtn" id="musicBtn" title="音乐开关">🎵</button>
+  <button class="pill iconBtn" id="themeBtn" title="换背景">🎨</button>
+  <button class="pill iconBtn" id="fullscreenBtn" title="全屏">
+    <svg class="ic ic-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>
+    <svg class="ic ic-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4"/><path d="M20 9h-5V4"/><path d="M15 20v-5h5"/><path d="M4 15h5v5"/></svg>
+  </button>
 </div>
 
 <div id="pauseOverlay">
@@ -250,17 +281,21 @@ start.addEventListener('pointerdown', () => {
   spawnBubble(); spawnBubble(); spawnBubble();
 }, { once: true });
 
-// 全屏（平板上很实用）
-document.getElementById('fullscreenBtn').addEventListener('pointerdown', () => {
+// 全屏（平板上很实用），图标随状态切换：展开 ⤢ / 收拢 ⤡
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+fullscreenBtn.addEventListener('pointerdown', () => {
   if (!document.fullscreenElement) {
     (document.documentElement.requestFullscreen?.() || Promise.reject()).catch(()=>{});
   } else document.exitFullscreen();
+});
+document.addEventListener('fullscreenchange', () => {
+  fullscreenBtn.classList.toggle('fs', !!document.fullscreenElement);
 });
 
 // ---------- 暂停 ----------
 const pauseBtn = document.getElementById('pauseBtn');
 const pauseOverlay = document.getElementById('pauseOverlay');
-let paused = false, gameOver = false, timeLeft = 180;
+let paused = false, gameOver = false, timeLeft = 120;
 
 function setPaused(v) {
   if (gameOver) return;
@@ -270,7 +305,7 @@ function setPaused(v) {
   pauseBtn.textContent = paused ? '▶' : '⏸';
 }
 pauseBtn.addEventListener('pointerdown', () => setPaused(!paused));
-pauseOverlay.addEventListener('pointerdown', () => setPaused(false));
+// 暂停遮罩本身不可点，只能通过 ⏸/▶ 按钮恢复（防止宝宝乱点误触恢复）
 
 // ---------- 3 分钟倒计时 ----------
 const timerEl = document.getElementById('timer');
@@ -298,7 +333,7 @@ function endGame() {
 document.getElementById('againBtn').addEventListener('pointerdown', e => {
   e.stopPropagation();
   score = 0; scoreEl.textContent = '0';
-  timeLeft = 180; updateTimer();
+  timeLeft = 120; updateTimer();
   document.querySelectorAll('.bubble').forEach(b => b.remove());
   paused = false; gameOver = false;
   document.body.classList.remove('paused');
@@ -527,8 +562,18 @@ function startMusic() {
 const musicBtn = document.getElementById('musicBtn');
 musicBtn.addEventListener('pointerdown', () => {
   musicOn = !musicOn;
-  musicBtn.textContent = musicOn ? '🎵 开' : '🎵 关';
+  musicBtn.classList.toggle('off', !musicOn);   // 关闭时音符上划一道斜线
   if (musicOn && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+});
+
+// ---------- 换背景：晨雾草原 → 樱花花园 → 星夜 循环 ----------
+const themeBtn = document.getElementById('themeBtn');
+const themes = ['', 'theme-b', 'theme-c'];   // '' = 晨雾草原
+let themeIdx = 2;                            // 默认星夜
+themeBtn.addEventListener('pointerdown', () => {
+  themeIdx = (themeIdx + 1) % themes.length;
+  document.body.classList.remove('theme-b', 'theme-c');
+  if (themeIdx) document.body.classList.add(themes[themeIdx]);
 });
 
 // 回到页面时恢复声音上下文
