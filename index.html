@@ -18,17 +18,23 @@
     overscroll-behavior: none;
   }
 
+  /* 全屏背景层：直接画在 body 上 iPad Safari 有时不渲染，改用独立固定层 */
+  #bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: linear-gradient(180deg, #DFEDF6 0%, #F2EFE9 58%, #FAF1E5 100%);
+  }
+
   /* 主题切换过渡 */
-  body { transition: background 1s ease; }
+  #bg { transition: background 1s ease; }
   #ground { transition: background 1s ease; }
 
   /* 主题 B：樱花花园 */
-  body.theme-b { background: linear-gradient(180deg, #F9E9F0 0%, #F4EDF7 58%, #FDF3EE 100%); }
+  body.theme-b #bg { background: linear-gradient(180deg, #F9E9F0 0%, #F4EDF7 58%, #FDF3EE 100%); }
   body.theme-b #ground { background: linear-gradient(180deg, #F0D5DC 0%, #E7C3CF 100%); }
   body.theme-b .cloud { background: rgba(255,255,255,.8); }
 
   /* 主题 C：星夜 */
-  body.theme-c { background: linear-gradient(180deg, #3E4A6B 0%, #4C5578 60%, #6B6480 100%); }
+  body.theme-c #bg { background: linear-gradient(180deg, #3E4A6B 0%, #4C5578 60%, #6B6480 100%); }
   body.theme-c #ground { background: linear-gradient(180deg, #3F5866 0%, #354A56 100%); }
   body.theme-c .cloud { background: rgba(255,255,255,.16); }
 
@@ -222,6 +228,7 @@
 </head>
 <body class="theme-c">
 
+<div id="bg"></div>
 <div id="ground"></div>
 
 <div id="hud">
