@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>捞小鱼 🐟 点一点网住它</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  /* 本页主题配色（交给 common.css 的背景层用） */
+  body { --sky1:#CFE9F8; --sky2:#BFE0F2; --sky3:#9FD0E8; --gr1:#E8D9A8; --gr2:#DCC98F; --cl:rgba(255,255,255,.55); }
+  body.theme-b { --sky1:#FBE4E8; --sky2:#F6D8E4; --sky3:#EFC9DC; --gr1:#F0D5DC; --gr2:#E7C3CF; --cl:rgba(255,255,255,.7); }
+  body.theme-c { --sky1:#1F3A5C; --sky2:#2A4A6E; --sky3:#36587A; --gr1:#3A4A5A; --gr2:#2E3C4A; --cl:rgba(255,255,255,.14); }
+  body #ground { height: 10vh; }
+
+  /* 鱼：外层负责横向游动，内层负责上下浮动和表情 */
+  .fish {
+    position: absolute; z-index: 5; left: 0;
+    transform: translateX(0);
+    animation: swimX linear forwards;
+    will-change: transform;
+  }
+  @keyframes swimX { from { transform: translateX(0); } to { transform: translateX(var(--dx)); } }
+  .bob { display: block; animation: bobY 1.3s ease-in-out infinite; line-height: 1; filter: drop-shadow(0 4px 6px rgba(0,20,60,.2)); cursor: pointer; }
+  @keyframes bobY { 50% { transform: translateY(-12px); } }
+  .bob.flip { transform: scaleX(-1); }
+  .bob.gold { text-shadow: 0 0 14px rgba(255,210,70,.95); }
+  .bob.caught { animation: caught .45s ease forwards !important; pointer-events: none; }
+  @keyframes caught { 40% { transform: scale(1.4) rotate(-8deg); } 100% { transform: scale(.5) translateY(-90px); opacity: 0; } }
+  .bob.escape { animation: escTuck .45s ease-in forwards !important; pointer-events: none; }
+  @keyframes escTuck { 30% { transform: rotate(-12deg) scale(.92); } 100% { transform: rotate(10deg) scale(.85); } }
+  .bob.giggle { animation: giggle .5s ease !important; }
+  @keyframes giggle { 25% { transform: rotate(-10deg) scale(1.15); } 75% { transform: rotate(10deg) scale(1.15); } }
+
+  /* 大波预警横幅 */
+  #waveWarn {
+    position: fixed; left: 50%; top: 16vh; transform: translateX(-50%);
+    z-index: 15; display: none; pointer-events: none; white-space: nowrap;
+    background: rgba(255,255,255,.94); color: #C97B6B;
+    font-size: clamp(20px, 4.5vw, 30px); font-weight: 800;
+    padding: 14px 32px; border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    animation: wavePulse .55s ease-in-out infinite alternate;
+  }
+  @keyframes wavePulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.07); } }
+
+  /* 上浮的环境气泡 */
+  .bub { position: absolute; z-index: 1; pointer-events: none; opacity: .5; animation: riseup linear forwards; }
+  @keyframes riseup { from { transform: translateY(0); opacity: .5; } to { transform: translateY(-110vh); opacity: 0; } }
+</style>
+</head>
+<body class="theme-c">
+
+<div id="bg"></div>
+<div id="ground"></div>
+
+<div id="hud">
+  <a class="pill iconBtn" id="homeBtn" href="index.html" style="text-decoration:none;color:inherit" title="回主页">🏠</a>
+  <div class="hudMid">
+  <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
+  <div class="pill" id="timerPill">⏱ <span id="timer">60</span></div>
+  </div>
+  <button class="pill iconBtn" id="pauseBtn" title="暂停">⏸</button>
+</div>
+
+<div id="pauseOverlay">
+  <div class="big">⏸️</div>
+  <p>休息一下～</p>
+  <div class="pauseTools">
+    <button class="pill iconBtn" id="musicBtn" title="音乐开关">🎵</button>
+    <button class="pill iconBtn" id="themeBtn" title="换背景">🎨</button>
+  </div>
+</div>
+
+<div id="waveWarn">🌊 即将有一大波生物来袭！</div>
+
+<div id="endOverlay">
+  <div class="card">
+    <h2>时间到！</h2>
+    <div class="stars" id="endStars">⭐⭐⭐</div>
+    <div class="num">你网到了 <span id="finalFish">0</span> 条小鱼！</div>
+    <div class="num" style="font-size: clamp(14px,3vw,18px); color:#9B8B76;">得分 <span id="finalScore">0</span> 分</div>
+    <div id="dex"></div>
+    <div class="num" style="font-size: clamp(14px,3vw,18px); color:#9B8B76;">这局网到的海底朋友 👆</div>
+    <button class="pill" id="againBtn">▶ 再玩一次</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="demo">🐟</div>
+  <h1>捞小鱼</h1>
+  <p>小鱼游过来啦，快点它网住！</p>
+  <button id="startBtn">▶ 开始游戏</button>
+</div>
+
+<script>
+// 页面配置（必须在 common.js 之前）
+window.GAME_DURATION = 60;
+window.GameHooks = {
+  onStart: function () { scheduleFish(); scheduleStar(); },
+  onTimeUp: function () { endGame(); },
+  onReset: function () { caughtCount = 0; }
+};
+</script>
+<script src="common.js"></script>
+<script>
+const S = BG.state;
+const { pick, burst, showPraise, vibrate, tone } = BG;
+
+// ---------- 生物表：按「平均点击次数抓到一条」标定（30 万次模拟验证） ----------
+// 一档平均 1.2 次 · 二档 2 次 · 三档 3.2 次 · 大鲨鱼 4.5 次
+// p = 每次点击抓到概率；f = 没抓到这一次后直接溜走的概率（大鲨鱼 25% 封顶，体型越小越低）
+const CREATURES = [
+  { s: '🦐', sz: 0.70, score: 1, p: 0.83, f: 0.05, w: 24 },  // 一档：平均 1.2 次到手，最常见
+  { s: '🐟', sz: 0.80, score: 1, p: 0.83, f: 0.07, w: 24 },
+  { s: '🦀', sz: 0.90, score: 1, p: 0.83, f: 0.09, w: 20 },
+  { s: '🐠', sz: 1.00, score: 2, p: 0.50, f: 0.11, w: 16 },  // 二档：平均 2 次
+  { s: '🐡', sz: 1.15, score: 2, p: 0.50, f: 0.13, w: 14 },
+  { s: '🪼', sz: 1.20, score: 3, p: 0.50, f: 0.15, w: 11 },
+  { s: '🐢', sz: 1.30, score: 3, p: 0.50, f: 0.17, w: 9 },
+  { s: '🦑', sz: 1.40, score: 4, p: 0.31, f: 0.19, w: 6 },   // 三档：平均 3.2 次，越来越少
+  { s: '🐙', sz: 1.55, score: 5, p: 0.31, f: 0.21, w: 5 },
+  { s: '🐬', sz: 1.65, score: 6, p: 0.31, f: 0.23, w: 3 },   // 海豚：全场普通生物里最稀有
+];
+const GOLDEN = { s: '⭐', sz: 0.90, score: 10, p: 1.0, f: 0 };       // 金海星：百分百抓到但飞快，+10 全场最高分
+const SHARK  = { s: '🦈', sz: 1.80, score: 8, p: 0.22, f: 0.25 };   // 大鲨鱼：平均 4.5 次才到手的大奖，25% 概率溜走
+const seen = new Set();
+let caughtCount = 0;   // 本局网到的条数（与得分分开统计）
+
+function pickSpecies() {
+  if (Math.random() < 0.08) return SHARK;   // 鲨鱼约 8%
+  const total = CREATURES.reduce((a, c) => a + c.w, 0);
+  let r = Math.random() * total;
+  for (const c of CREATURES) { r -= c.w; if (r <= 0) return c; }
+  return CREATURES[0];
+}
+
+// 金海星：不混在普通刷新里，改为每 8~12 秒随机光顾一次（独立计时，暂停时跳过该次）
+function scheduleStar() {
+  const delay = 8000 + Math.random() * 4000;
+  setTimeout(() => {
+    if (S.started && !S.paused && !S.over && !document.hidden) spawnFish(GOLDEN);
+    scheduleStar();
+  }, delay);
+}
+
+// 环境气泡
+setInterval(() => {
+  if (!S.started || S.paused || S.over || document.hidden) return;
+  const b = document.createElement('div');
+  b.className = 'bub';
+  b.textContent = '🫧';
+  b.style.fontSize = (14 + Math.random() * 22) + 'px';
+  b.style.left = (Math.random() * 96) + 'vw';
+  b.style.bottom = '-40px';
+  b.style.animationDuration = (5 + Math.random() * 5) + 's';
+  document.body.appendChild(b);
+  setTimeout(() => b.remove(), 11000);
+}, 900);
+
+function scheduleFish() {
+  // 基线间隔 1.2s 起步、随时间加快到约 0.95s；大波期间再减半
+  const delay = Math.max(900, 1200 - (60 - S.timeLeft) * 2) * (waveActive ? 0.5 : 1);
+  setTimeout(() => { spawnFish(); scheduleFish(); }, delay);
+}
+
+const MAX_FISH = 8;      // 同屏普通生物上限（大波期间放宽到 12；金海星不受限）
+let liveCount = 0;
+
+function spawnFish(force) {
+  if (!S.started || S.paused || S.over || document.hidden) return;
+  const c = force || pickSpecies();
+  const golden = c === GOLDEN, shark = c === SHARK;
+  if (!golden && liveCount >= (waveActive ? 12 : MAX_FISH)) return;   // 屏上够多了，这条不刷
+
+  const f = document.createElement('div');
+  f.className = 'fish';
+  const dir = Math.random() < 0.5 ? 1 : -1;          // 1 = 从左往右
+  f.style.top = (16 + Math.random() * 58) + 'vh';
+  const dur = golden ? 2000 : (5500 + Math.random() * 4500);   // 金海星百分百能抓，但飞快掠过拼手速
+  if (dir === 1) { f.style.left = '-14vw'; f.style.setProperty('--dx', '118vw'); }
+  else { f.style.left = '104vw'; f.style.setProperty('--dx', '-118vw'); }
+  f.style.animationDuration = dur + 'ms';
+
+  const bob = document.createElement('span');
+  bob.className = 'bob' + (dir === 1 ? ' flip' : '') + (golden ? ' gold' : '');
+  bob.textContent = c.s;
+  const base = Math.max(48, Math.min(window.innerWidth * 0.09, 88));
+  bob.style.fontSize = base * c.sz + 'px';
+  f.appendChild(bob);
+
+  let misses = 0;   // 这条鱼被点空了几次（第一次失误保底不溜）
+  let dashing = false;   // 正在躲闪冲刺中（冲刺期间的点击忽略，防止动画叠加）
+
+  // 躲闪冲刺：快速游一小段（前方快到屏幕边就掉头），冲完恢复原速游完剩下的路
+  function dodgeDash() {
+    if (dashing) return;
+    dashing = true;
+    const totalPx = window.innerWidth * 1.18;   // 与 --dx 的 118vw 一致
+    const tr = getComputedStyle(f).transform;
+    let curX = 0;
+    if (tr && tr !== 'none') {
+      const parts = tr.match(/matrix\(([^)]+)\)/);
+      if (parts) curX = parseFloat(parts[1].split(',')[4]) || 0;
+    }
+    const progress = Math.min(Math.abs(curX) / totalPx, 0.99);
+    const remForward = totalPx * (1 - progress);   // 前方还剩多少路
+    const dashPx = totalPx * 0.22;                 // 冲一小段
+    const turn = remForward < dashPx * 1.6;        // 前方快到头就掉头，防止冲出屏幕
+    const sign = turn ? -dir : dir;
+    if (turn) bob.classList.toggle('flip');        // 掉头换个方向游
+    // 停掉原匀速游动，接管位移
+    f.style.animation = 'none';
+    const dashDur = 480;
+    f.animate(
+      [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + (curX + sign * dashPx) + 'px)' }],
+      { duration: dashDur, easing: 'ease-out', fill: 'forwards' }
+    );
+    // 冲完接着以原速游到终点（保持和原来一样的线速度）
+    const endX = totalPx * dir;
+    const afterDashX = curX + sign * dashPx;
+    const remainMs = Math.max(600, dur * (1 - progress) - dashDur);
+    f.animate(
+      [{ transform: 'translateX(' + afterDashX + 'px)' }, { transform: 'translateX(' + endX + 'px)' }],
+      { duration: remainMs, easing: 'linear', fill: 'forwards', delay: dashDur }
+    );
+    setTimeout(() => { dashing = false; }, dashDur + 120);
+  }
+
+  bob.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    if (bob.classList.contains('caught') || bob.classList.contains('escape') || bob.classList.contains('giggle') || dashing) return;
+    if (BG.tooManyPointers()) return;
+
+    // 概率判定：越小越好抓
+    if (Math.random() < c.p) {
+      bob.classList.add('caught');
+      BG.addScore(c.score);
+      caughtCount++;
+      seen.add(c.s);
+      const r = bob.getBoundingClientRect();
+      burst(r.left + r.width/2, r.top + r.height/2, golden ? 14 : (shark ? 18 : 8), golden ? ['⭐','✨','💫'] : (shark ? ['💦','✨','⭐','🎉'] : ['💦','✨','🫧']));
+      if (golden) showPraise(r.left + r.width/2, r.top, '金色海星！+10');
+      else if (shark) showPraise(r.left + r.width/2, r.top, '大鲨鱼！+' + c.score);
+      else if (Math.random() < 0.35) showPraise(r.left + r.width/2, r.top, pick(['抓到啦！','扑通！','好鱼！','哇']));
+      // 抓到音效：咚咚水声 + 小琶音（鲨鱼加一段低音吼）
+      tone(300, { slide: 140, dur: .2, vol: .3 });
+      tone(880, { t0: .1, dur: .3, vol: .15 });
+      if (golden) tone(1568, { t0: .2, dur: .35, vol: .15 });
+      if (shark) { tone(160, { t0: .15, type: 'sawtooth', slide: 90, dur: .5, vol: .22 }); tone(1046, { t0: .3, dur: .4, vol: .15 }); tone(1318, { t0: .4, dur: .45, vol: .15 }); }
+      vibrate(golden ? 40 : (shark ? [40, 60, 40] : 22));
+      setTimeout(removeFish, 500);
+    } else {
+      // 没抓到：第一次失误保底只是躲一下（让宝宝看到还能再点），
+      // 从第二次失误起才按体型掷溜走骰（越大越容易溜）
+      misses++;
+      if (misses >= 2 && Math.random() < c.f) {
+        bob.classList.add('escape');
+        showPraise(e.clientX, e.clientY - 20, pick(['嗖——溜走啦！','哎呀，跑了！','好滑，追不上！']));
+        // 溜走表现：整条鱼沿原来游的方向加速冲出屏幕（而不是原地消失）
+        const tr = getComputedStyle(f).transform;
+        let curX = 0;
+        if (tr && tr !== 'none') {
+          const parts = tr.match(/matrix\(([^)]+)\)/);
+          if (parts) curX = parseFloat(parts[1].split(',')[4]) || 0;
+        }
+        const dashPx = (dir === 1 ? 1.25 : -1.25) * window.innerWidth;
+        if (f.animate) {
+          f.animate(
+            [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + (curX + dashPx) + 'px)' }],
+            { duration: 420, easing: 'ease-in', fill: 'forwards' }
+          );
+        }
+        tone(400, { type: 'triangle', slide: 900, dur: .25, vol: .15 });
+        vibrate(8);
+        setTimeout(removeFish, 600);
+      } else {
+        // 没抓到也没溜：快速游一小段让你追着点（鲨鱼边咯咯笑边窜）
+        if (shark) {
+          bob.classList.add('giggle');
+          showPraise(e.clientX, e.clientY - 20, '抓不到我～');
+          tone(900, { type: 'triangle', vol: .18, dur: .1 });
+          tone(700, { type: 'triangle', vol: .18, dur: .1, t0: .08 });
+          tone(550, { type: 'triangle', vol: .18, dur: .1, t0: .16 });
+          setTimeout(() => bob.classList.remove('giggle'), 600);
+        } else if (Math.random() < 0.5) {
+          showPraise(e.clientX, e.clientY - 20, pick(['再点一次！','扑空啦','加油！','往哪儿跑！']));
+        }
+        dodgeDash();
+        tone(420, { type: 'triangle', slide: 720, dur: .18, vol: .14 });
+        vibrate(8);
+      }
+    }
+  });
+
+  document.body.appendChild(f);
+  liveCount++;
+  let removed = false;   // 防止自然到点与被抓/溜走的定时器重复扣减
+  const removeFish = () => { if (removed) return; removed = true; liveCount--; f.remove(); };
+  setTimeout(removeFish, dur + 300);
+}
+
+// 点空白处：水花涟漪
+document.addEventListener('pointerdown', e => {
+  if (!S.started || S.paused || S.over) return;
+  if (e.target.closest('#hud') || e.target.closest('#start') || e.target.closest('#endOverlay')) return;
+  if (BG.tooManyPointers()) return;
+  const rip = document.createElement('div');
+  const rs = 80 + Math.random() * 40;
+  rip.className = 'ripple';
+  rip.style.width = rip.style.height = rs + 'px';
+  rip.style.left = (e.clientX - rs/2) + 'px'; rip.style.top = (e.clientY - rs/2) + 'px';
+  document.body.appendChild(rip);
+  setTimeout(() => rip.remove(), 550);
+  BG.playBlip();
+  vibrate(8);
+});
+
+// ---------- 大波：每局一次 —— 第 42 秒预警，第 45 秒来临并持续 10 秒（至第 55 秒） ----------
+// 相位按游戏时间推算（elapsed = 60 - 剩余），暂停时倒计时冻结、相位自动停住不会错拍
+let waveActive = false, waveState = '';
+const waveWarnEl = document.getElementById('waveWarn');
+setInterval(() => {
+  if (!S.started || S.over) {   // 未开始/已结束：复位
+    if (waveState) { waveState = ''; waveActive = false; waveWarnEl.style.display = 'none'; }
+    return;
+  }
+  const elapsed = 60 - S.timeLeft;
+  if (elapsed >= 42 && elapsed < 45) {
+    // 预警期
+    waveActive = false;
+    if (waveState !== 'warn') {
+      waveState = 'warn';
+      waveWarnEl.style.display = 'block';
+      // 三声渐高的低音鼓「咚——咚——咚咚！」（低频正弦+音高下坠，穿透背景音乐）
+      tone(140, { type: 'sine', slide: 55, dur: .3, vol: .45 });
+      tone(160, { type: 'sine', slide: 60, dur: .3, vol: .45, t0: .32 });
+      tone(200, { type: 'sine', slide: 70, dur: .38, vol: .5, t0: .64 });
+      vibrate([30, 80, 30]);
+    }
+  } else if (elapsed >= 45 && elapsed < 55) {
+    // 大波期：双倍密度
+    waveWarnEl.style.display = 'none';
+    if (waveState !== 'wave') {
+      waveState = 'wave';
+      waveActive = true;
+      spawnFish(); spawnFish(); spawnFish();   // 开波瞬间先涌出三条
+      tone(180, { slide: 620, dur: .5, vol: .2 });
+      vibrate(40);
+    }
+  } else {
+    // 平静期
+    waveWarnEl.style.display = 'none';
+    waveActive = false;
+    waveState = 'calm';
+  }
+}, 400);
+
+// ---------- 结算 ----------
+function endGame() {
+  const stars = S.score >= 20 ? '⭐⭐⭐⭐⭐' : S.score >= 13 ? '⭐⭐⭐⭐' : S.score >= 8 ? '⭐⭐⭐' : S.score >= 3 ? '⭐⭐' : '⭐';
+  document.getElementById('endStars').textContent = stars;
+  document.getElementById('finalFish').textContent = caughtCount;
+  document.getElementById('finalScore').textContent = S.score;
+  const dex = document.getElementById('dex');
+  dex.innerHTML = '';
+  [...CREATURES.map(c => c.s), GOLDEN.s, SHARK.s].forEach(sp => {
+    if (!seen.has(sp)) return;          // 只展示抓到过的
+    const el = document.createElement('span');
+    el.textContent = sp;
+    el.classList.add('seen');
+    dex.appendChild(el);
+  });
+  document.getElementById('endOverlay').style.display = 'flex';
+}
+</script>
+</body>
+</html>

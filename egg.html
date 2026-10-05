@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>恐龙蛋 🥚 敲一敲破壳啦</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  /* 本页主题配色 */
+  body { --sky1:#E9F3DC; --sky2:#F4F0DE; --sky3:#FBF1E2; --gr1:#AED898; --gr2:#97C783; --cl:rgba(255,255,255,.7); }
+  body.theme-b { --sky1:#F9E9F0; --sky2:#F4EDF7; --sky3:#FDF3EE; --gr1:#F0D5DC; --gr2:#E7C3CF; --cl:rgba(255,255,255,.8); }
+  body.theme-c { --sky1:#3E4A6B; --sky2:#4C5578; --sky3:#6B6480; --gr1:#3F5866; --gr2:#354A56; --cl:rgba(255,255,255,.16); }
+
+  /* 舞台 */
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; flex-direction: column; gap: 8px; }
+  #eggWrap { position: relative; cursor: pointer; }
+  #egg {
+    font-size: clamp(150px, 32vh, 280px); line-height: 1;
+    filter: drop-shadow(0 12px 20px rgba(0,0,0,.18));
+    display: block;
+  }
+  #eggWrap.wobble #egg { animation: wobble .32s ease; }
+  @keyframes wobble { 25% { transform: rotate(-8deg) scale(1.04); } 60% { transform: rotate(7deg); } 100% { transform: rotate(0); } }
+  #eggWrap.drop #egg { animation: dropin .55s ease; }
+  @keyframes dropin { from { transform: translateY(-60vh); } to { transform: translateY(0); } }
+
+  /* 裂纹 */
+  .crack { position: absolute; background: rgba(96,64,34,.8); border-radius: 4px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #eggWrap.c1 .k1, #eggWrap.c2 .k2, #eggWrap.c3 .k3 { opacity: 1; }
+  .k1 { width: 30%; height: 5px; left: 32%; top: 36%; transform: rotate(-24deg); }
+  .k2 { width: 24%; height: 5px; left: 44%; top: 52%; transform: rotate(18deg); }
+  .k3 { width: 28%; height: 5px; left: 28%; top: 64%; transform: rotate(-14deg); }
+
+  /* 破壳的小家伙 */
+  #baby { font-size: clamp(150px, 32vh, 280px); line-height: 1; display: none; filter: drop-shadow(0 12px 20px rgba(0,0,0,.18)); }
+  #baby.show, #baby.leave { display: block; }
+  #baby.show { animation: hatch .55s ease; }
+  @keyframes hatch { from { transform: scale(.2) rotate(-25deg); } 60% { transform: scale(1.25) rotate(10deg); } to { transform: scale(1); } }
+  #baby.leave { animation: walkoff 1.3s ease forwards; }
+  @keyframes walkoff { to { transform: translateX(75vw); opacity: 0; } }
+
+  #counter { font-size: clamp(18px, 4vw, 26px); color: #7A6A55; font-weight: 800; background: rgba(255,255,255,.7); padding: 8px 22px; border-radius: 999px; }
+</style>
+</head>
+<body class="theme-c">
+
+<div id="bg"></div>
+
+<div id="hud">
+  <a class="pill iconBtn" id="homeBtn" href="index.html" style="text-decoration:none;color:inherit" title="回主页">🏠</a>
+  <div class="hudMid">
+  <div class="pill" id="scorePill">🥚 <span id="score">0</span></div>
+  <div class="pill" id="timerPill">⏱ <span id="timer">60</span></div>
+  </div>
+  <button class="pill iconBtn" id="pauseBtn" title="暂停">⏸</button>
+</div>
+
+<div id="stage">
+  <div id="eggWrap" class="drop">
+    <div id="egg">🥚</div>
+    <div class="crack k1"></div>
+    <div class="crack k2"></div>
+    <div class="crack k3"></div>
+  </div>
+  <div id="baby"></div>
+  <div id="counter">破壳啦 0 只</div>
+</div>
+
+<div id="pauseOverlay">
+  <div class="big">⏸️</div>
+  <p>休息一下～</p>
+  <div class="pauseTools">
+    <button class="pill iconBtn" id="musicBtn" title="音乐开关">🎵</button>
+    <button class="pill iconBtn" id="themeBtn" title="换背景">🎨</button>
+  </div>
+</div>
+
+<div id="endOverlay">
+  <div class="card">
+    <h2>时间到！</h2>
+    <div class="stars" id="endStars">⭐⭐⭐</div>
+    <div class="num">你孵出了 <span id="finalScore">0</span> 只小家伙！</div>
+    <div id="dex"></div>
+    <div class="num" style="font-size: clamp(14px,3vw,18px); color:#9B8B76;">图鉴（孵出来过的都会亮）</div>
+    <button class="pill" id="againBtn">▶ 再玩一次</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="demo">🥚</div>
+  <h1>恐龙蛋</h1>
+  <p>一直敲蛋蛋，敲到破壳为止！</p>
+  <button id="startBtn">▶ 开始游戏</button>
+</div>
+
+<script>
+// 页面配置（必须在 common.js 之前）
+window.GAME_DURATION = 60;
+window.GameHooks = {
+  onStart: function () {},
+  onTimeUp: function () { endGame(); },
+  onReset: function () { resetEgg(); }
+};
+</script>
+<script src="common.js"></script>
+<script>
+const S = BG.state;
+const { burst, showPraise, vibrate, retrigger } = BG;
+
+// ---------- 孵蛋 ----------
+const SPECIES = ['🦕','🦖','🐲','🐣'];
+const seen = new Set();
+let taps = 0, needed = 14, hatching = false;
+
+const eggWrap = document.getElementById('eggWrap');
+const babyEl = document.getElementById('baby');
+const counterEl = document.getElementById('counter');
+
+eggWrap.addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  if (!S.started || S.paused || S.over || hatching) return;
+  if (BG.tooManyPointers()) return;
+  taps++;
+  retrigger(eggWrap, 'wobble');
+  BG.tone(280 + taps * 28, { type: 'triangle', vol: .22, dur: .14, slide: (280 + taps * 28) * 1.5 });
+  vibrate(14);
+  if (taps >= needed * 0.35) eggWrap.classList.add('c1');
+  if (taps >= needed * 0.65) eggWrap.classList.add('c2');
+  if (taps >= needed * 0.9)  eggWrap.classList.add('c3');
+  if (taps >= needed) hatch();
+});
+
+function hatch() {
+  hatching = true;
+  const species = SPECIES[Math.floor(Math.random() * SPECIES.length)];
+  eggWrap.style.display = 'none';
+  babyEl.textContent = species;
+  babyEl.classList.add('show');
+  BG.addScore(1);
+  counterEl.textContent = '破壳啦 ' + S.score + ' 只';
+  seen.add(species);
+
+  const r = babyEl.getBoundingClientRect();
+  burst(r.left + r.width/2, r.top + r.height/2, 16, ['✨','⭐','💫','🌟','🎉']);
+  showPraise(r.left + r.width/2, r.top + 30, species === '🐣' ? '哇！是小鸡！' : '破壳啦！');
+  BG.fanfare();
+  vibrate([30, 40, 30]);
+
+  setTimeout(() => { babyEl.classList.remove('show'); void babyEl.offsetWidth; babyEl.classList.add('leave'); }, 1500);
+  setTimeout(() => {
+    babyEl.classList.remove('leave');
+    taps = 0;
+    needed = Math.min(30, 14 + S.score * 2);
+    eggWrap.classList.remove('c1', 'c2', 'c3');
+    eggWrap.style.display = 'block';
+    retrigger(eggWrap, 'drop');
+    hatching = false;
+  }, 2900);
+}
+
+// 点空白处
+document.addEventListener('pointerdown', e => {
+  if (!S.started || S.paused || S.over) return;
+  if (e.target.closest('#hud') || e.target.closest('#start') || e.target.closest('#endOverlay')) return;
+  if (e.target.closest('#eggWrap')) return;
+  if (BG.tooManyPointers()) return;
+  const rip = document.createElement('div');
+  const rs = 80 + Math.random() * 40;
+  rip.className = 'ripple';
+  rip.style.width = rip.style.height = rs + 'px';
+  rip.style.left = (e.clientX - rs/2) + 'px'; rip.style.top = (e.clientY - rs/2) + 'px';
+  document.body.appendChild(rip);
+  setTimeout(() => rip.remove(), 550);
+  BG.playBlip();
+  vibrate(8);
+});
+
+// ---------- 结算 ----------
+function endGame() {
+  const stars = S.score >= 6 ? '⭐⭐⭐⭐⭐' : S.score >= 5 ? '⭐⭐⭐⭐' : S.score >= 3 ? '⭐⭐⭐' : S.score >= 2 ? '⭐⭐' : '⭐';
+  document.getElementById('endStars').textContent = stars;
+  document.getElementById('finalScore').textContent = S.score;
+  const dex = document.getElementById('dex');
+  dex.innerHTML = '';
+  SPECIES.forEach(sp => {
+    const el = document.createElement('span');
+    el.textContent = sp;
+    if (seen.has(sp)) el.classList.add('seen');
+    dex.appendChild(el);
+  });
+  document.getElementById('endOverlay').style.display = 'flex';
+}
+
+function resetEgg() {
+  seen.clear();
+  taps = 0; needed = 14; hatching = false;
+  babyEl.classList.remove('show', 'leave');
+  eggWrap.classList.remove('c1', 'c2', 'c3');
+  eggWrap.style.display = 'block';
+  retrigger(eggWrap, 'drop');
+  counterEl.textContent = '破壳啦 0 只';
+}
+</script>
+</body>
+</html>

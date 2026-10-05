@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>动物地鼠 🐿️ 谁在探头？</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  /* 本页主题配色 */
+  body { --sky1:#E7F2DB; --sky2:#F2EFDF; --sky3:#FBF1E2; --gr1:#AED898; --gr2:#97C783; --cl:rgba(255,255,255,.7); }
+  body.theme-b { --sky1:#F9E9F0; --sky2:#F4EDF7; --sky3:#FDF3EE; --gr1:#F0D5DC; --gr2:#E7C3CF; --cl:rgba(255,255,255,.8); }
+  body.theme-c { --sky1:#3E4A6B; --sky2:#4C5578; --sky3:#6B6480; --gr1:#3F5866; --gr2:#354A56; --cl:rgba(255,255,255,.16); }
+  body #ground { height: 14vh; }
+
+  /* 洞口区 */
+  #field {
+    position: fixed; left: 50%; top: 54%; transform: translate(-50%, -50%);
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: clamp(14px, 3.5vw, 30px);
+    width: min(92vw, 680px);
+    z-index: 5;
+  }
+  .hole { position: relative; height: clamp(96px, 17vw, 150px); overflow: hidden; }
+  .pit {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 96%; height: 30%;
+    background: radial-gradient(ellipse at 50% 40%, #6B5138 0%, #4E3A28 75%);
+    border-radius: 50%;
+    box-shadow: inset 0 6px 10px rgba(0,0,0,.35);
+  }
+  body.theme-c .pit { background: radial-gradient(ellipse at 50% 40%, #2E3648 0%, #1F2534 75%); }
+  .animal {
+    position: absolute; bottom: 6%; left: 50%;
+    font-size: clamp(50px, 9vw, 84px); line-height: 1;
+    transform: translate(-50%, 130%);
+    transition: transform .22s ease-out;
+    filter: drop-shadow(0 3px 3px rgba(0,0,0,.15));
+    cursor: pointer;
+  }
+  .animal.up { transform: translate(-50%, 0); }
+  .animal.hit { animation: molehit .38s ease forwards; }
+  @keyframes molehit {
+    30%  { transform: translate(-50%, -16%) scale(1.15); }
+    100% { transform: translate(-50%, 130%); }
+  }
+  .animal.gold { filter: drop-shadow(0 0 12px rgba(255,200,60,.95)); }
+</style>
+</head>
+<body class="theme-c">
+
+<div id="bg"></div>
+<div id="ground"></div>
+
+<div id="hud">
+  <a class="pill iconBtn" id="homeBtn" href="index.html" style="text-decoration:none;color:inherit" title="回主页">🏠</a>
+  <div class="hudMid">
+  <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
+  <div class="pill" id="timerPill">⏱ <span id="timer">60</span></div>
+  </div>
+  <button class="pill iconBtn" id="pauseBtn" title="暂停">⏸</button>
+</div>
+
+<div id="field"></div>
+
+<div id="pauseOverlay">
+  <div class="big">⏸️</div>
+  <p>休息一下～</p>
+  <div class="pauseTools">
+    <button class="pill iconBtn" id="musicBtn" title="音乐开关">🎵</button>
+    <button class="pill iconBtn" id="themeBtn" title="换背景">🎨</button>
+  </div>
+</div>
+
+<div id="endOverlay">
+  <div class="card">
+    <h2>时间到！</h2>
+    <div class="stars" id="endStars">⭐⭐⭐</div>
+    <div class="num">你交到了 <span id="finalScore">0</span> 个动物朋友！</div>
+    <div id="dex"></div>
+    <div class="num" style="font-size: clamp(14px,3vw,18px); color:#9B8B76;">动物图鉴（见过的都会亮起来）</div>
+    <button class="pill" id="againBtn">▶ 再玩一次</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="demo">🐿️</div>
+  <h1>谁在探头？</h1>
+  <p>小动物从洞里探出头，快点它！</p>
+  <button id="startBtn">▶ 开始游戏</button>
+</div>
+
+<script>
+// 页面配置（必须在 common.js 之前）
+window.GAME_DURATION = 60;
+window.GameHooks = {
+  onStart: function () { scheduleSpawn(); },
+  onTimeUp: function () { endGame(); },
+  onReset: function () { holes.forEach(retire); }
+};
+</script>
+<script src="common.js"></script>
+<script>
+const S = BG.state;
+const { pick, burst, showPraise, vibrate, chirp } = BG;
+
+// ---------- 动物 ----------
+const SPECIES = ['🐰','🐿️','🐣','🐻','🦊','🐷','🐸','🐵'];
+const GOLDEN = '🦔';
+const seen = new Set();
+
+// 建 6 个洞
+const field = document.getElementById('field');
+const holes = [];
+for (let i = 0; i < 6; i++) {
+  const h = document.createElement('div');
+  h.className = 'hole';
+  const pit = document.createElement('div');
+  pit.className = 'pit';
+  h.appendChild(pit);
+  field.appendChild(h);
+  holes.push({ el: h, animal: null, busy: false });
+}
+
+function scheduleSpawn() {
+  const delay = Math.max(600, 950 - (60 - S.timeLeft) * 4);   // 越到后面节奏稍快
+  setTimeout(() => { spawnAnimal(); scheduleSpawn(); }, delay);
+}
+
+function spawnAnimal() {
+  if (!S.started || S.paused || S.over || document.hidden) return;
+  const free = holes.filter(h => !h.busy);
+  if (!free.length) return;
+  const hole = free[Math.floor(Math.random() * free.length)];
+  const golden = Math.random() < 0.10;
+  const species = golden ? GOLDEN : SPECIES[Math.floor(Math.random() * SPECIES.length)];
+
+  const a = document.createElement('div');
+  a.className = 'animal' + (golden ? ' gold' : '');
+  a.textContent = species;
+  hole.el.appendChild(a);
+  hole.animal = a; hole.busy = true;
+
+  requestAnimationFrame(() => requestAnimationFrame(() => a.classList.add('up')));
+
+  // 金色地鼠：快速消失（约 0.8 秒）；普通动物停留 1.5~2.5 秒
+  const stay = golden ? 800 : (1500 + Math.random() * 1000);
+  const hideTimer = setTimeout(() => retire(hole), stay);
+
+  a.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    if (BG.tooManyPointers() || a.classList.contains('hit')) return;
+    clearTimeout(hideTimer);
+    hitAnimal(hole, species, golden);
+  });
+}
+
+function retire(hole) {
+  if (hole.animal) {
+    hole.animal.classList.remove('up');
+    const el = hole.animal;
+    setTimeout(() => el.remove(), 300);
+  }
+  hole.animal = null; hole.busy = false;
+}
+
+function hitAnimal(hole, species, golden) {
+  const a = hole.animal;
+  a.classList.remove('up');
+  a.classList.add('hit');
+  hole.animal = null; hole.busy = false;
+  setTimeout(() => a.remove(), 450);
+
+  BG.addScore(golden ? 3 : 1);
+  seen.add(species);
+  const r = a.getBoundingClientRect();
+  burst(r.left + r.width/2, r.top + r.height/2, golden ? 14 : 8, golden ? ['⭐','✨','💫'] : '✨');
+  if (golden || Math.random() < 0.35) showPraise(r.left + r.width/2, r.top, golden ? '金色地鼠！+3' : pick(['你好呀～','抓到啦！','哈哈','嘚嘚']));
+  chirp(golden ? 950 : 420 + SPECIES.indexOf(species) * 55, golden);
+  vibrate(golden ? 40 : 22);
+}
+
+// 点空白处：小草小花 + 音效
+document.addEventListener('pointerdown', e => {
+  if (!S.started || S.paused || S.over) return;
+  if (e.target.closest('#hud') || e.target.closest('#start') || e.target.closest('#endOverlay')) return;
+  if (BG.tooManyPointers()) return;
+  const rip = document.createElement('div');
+  const rs = 80 + Math.random() * 40;
+  rip.className = 'ripple';
+  rip.style.width = rip.style.height = rs + 'px';
+  rip.style.left = (e.clientX - rs/2) + 'px'; rip.style.top = (e.clientY - rs/2) + 'px';
+  document.body.appendChild(rip);
+  setTimeout(() => rip.remove(), 550);
+  const g = document.createElement('div');
+  g.className = 'spark';
+  g.textContent = pick(['🌱','🌼','🍀']);
+  g.style.fontSize = '30px';
+  g.style.left = e.clientX + 'px'; g.style.top = e.clientY + 'px';
+  g.style.setProperty('--dx', '0px'); g.style.setProperty('--dy', '-30px');
+  document.body.appendChild(g);
+  setTimeout(() => g.remove(), 900);
+  BG.playBlip();
+  vibrate(8);
+});
+
+// ---------- 结算 ----------
+function endGame() {
+  holes.forEach(retire);
+  const stars = S.score >= 20 ? '⭐⭐⭐⭐⭐' : S.score >= 12 ? '⭐⭐⭐⭐' : S.score >= 7 ? '⭐⭐⭐' : S.score >= 3 ? '⭐⭐' : '⭐';
+  document.getElementById('endStars').textContent = stars;
+  document.getElementById('finalScore').textContent = S.score;
+  const dex = document.getElementById('dex');
+  dex.innerHTML = '';
+  [...SPECIES, GOLDEN].forEach(sp => {
+    const el = document.createElement('span');
+    el.textContent = sp;
+    if (seen.has(sp)) el.classList.add('seen');
+    dex.appendChild(el);
+  });
+  document.getElementById('endOverlay').style.display = 'flex';
+}
+</script>
+</body>
+</html>

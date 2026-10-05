@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>戳泡泡 🫧 宝宝的游戏</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  /* 本页主题配色 */
+  body { --sky1:#DFEDF6; --sky2:#F2EFE9; --sky3:#FAF1E5; --gr1:#C4E3B2; --gr2:#ABD29B; --cl:rgba(255,255,255,.7); }
+  body.theme-b { --sky1:#F9E9F0; --sky2:#F4EDF7; --sky3:#FDF3EE; --gr1:#F0D5DC; --gr2:#E7C3CF; --cl:rgba(255,255,255,.8); }
+  body.theme-c { --sky1:#3E4A6B; --sky2:#4C5578; --sky3:#6B6480; --gr1:#3F5866; --gr2:#354A56; --cl:rgba(255,255,255,.16); }
+
+  /* 泡泡 */
+  .bubble {
+    position: absolute;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 5;
+    cursor: pointer;
+    background:
+      radial-gradient(circle at 30% 28%, rgba(255,255,255,.95) 0 12%, rgba(255,255,255,.35) 14% 22%, transparent 26%),
+      radial-gradient(circle at 68% 75%, rgba(255,255,255,.25) 0 10%, transparent 14%);
+    box-shadow: inset -6px -8px 18px rgba(255,255,255,.55), 0 6px 16px rgba(0,0,0,.08);
+    animation: rise linear forwards;
+  }
+  @keyframes rise {
+    from { transform: translateY(0) translateX(0); }
+    to   { transform: translateY(calc(-115vh)) translateX(var(--sway, 20px)); }
+  }
+  .bubble .face { line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.1)); pointer-events: none; }
+  @keyframes pop {
+    0%   { transform: scale(1); opacity: 1; }
+    60%  { transform: scale(1.45); opacity: .9; }
+    100% { transform: scale(1.9); opacity: 0; }
+  }
+  .bubble.pop { animation: pop .3s ease-out forwards !important; pointer-events: none; }
+</style>
+</head>
+<body class="theme-c">
+
+<div id="bg"></div>
+<div id="ground"></div>
+
+<div id="hud">
+  <a class="pill iconBtn" id="homeBtn" href="index.html" style="text-decoration:none;color:inherit" title="回主页">🏠</a>
+  <div class="hudMid">
+  <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
+  <div class="pill" id="timerPill">⏱ <span id="timer">60</span></div>
+  </div>
+  <button class="pill iconBtn" id="pauseBtn" title="暂停">⏸</button>
+</div>
+
+<div id="pauseOverlay">
+  <div class="big">⏸️</div>
+  <p>休息一下～</p>
+  <div class="pauseTools">
+    <button class="pill iconBtn" id="musicBtn" title="音乐开关">🎵</button>
+    <button class="pill iconBtn" id="themeBtn" title="换背景">🎨</button>
+  </div>
+</div>
+
+<div id="endOverlay">
+  <div class="card">
+    <h2>时间到！</h2>
+    <div class="stars" id="endStars">⭐⭐⭐</div>
+    <div class="num">你戳了 <span id="finalScore">0</span> 个泡泡，真棒！</div>
+    <button class="pill" id="againBtn">▶ 再玩一次</button>
+  </div>
+</div>
+
+<div id="start">
+  <div class="demo">🫧 👶</div>
+  <h1>戳泡泡</h1>
+  <p>点一下泡泡，啵~ 就爆开啦！</p>
+  <button id="startBtn">▶ 开始游戏</button>
+</div>
+
+<script>
+// 页面配置（必须在 common.js 之前）
+window.GAME_DURATION = 60;
+window.GameHooks = {
+  onStart: function () {
+    setInterval(spawnBubble, 850);
+    spawnBubble(); spawnBubble(); spawnBubble();
+  },
+  onTimeUp: function () { endGame(); },
+  onReset: function () {}
+};
+</script>
+<script src="common.js"></script>
+<script>
+const S = BG.state;
+const { pick, burst, showPraise, vibrate, chirp } = BG;
+
+// ---------- 泡泡 ----------
+const faces = ['👶','🐯','🐰','🐻','🐼','🐸','🐵','🐷','⭐','🌸','🐠','🦄','🐥','🍓','🚗'];
+const colors = [
+  'rgba(255,150,190,.55)', 'rgba(150,200,255,.55)', 'rgba(255,210,120,.55)',
+  'rgba(160,230,180,.55)', 'rgba(215,170,255,.55)', 'rgba(140,220,235,.55)'
+];
+
+function spawnBubble() {
+  if (S.paused || S.over || document.hidden) return;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  const base = Math.min(window.innerWidth, window.innerHeight);
+  const size = Math.max(80, base * (0.10 + Math.random() * 0.09));
+  b.style.width = b.style.height = size + 'px';
+  b.style.left = (5 + Math.random() * 85) + 'vw';
+  b.style.bottom = '-220px';
+  b.style.background += ', radial-gradient(circle, ' + pick(colors) + ' 0 70%)';
+  b.style.animationDuration = (12 + Math.random() * 8) + 's';
+  b.style.setProperty('--sway', (Math.random()*60-30) + 'px');
+
+  const f = document.createElement('div');
+  f.className = 'face';
+  f.style.fontSize = size * 0.5 + 'px';
+  f.textContent = pick(faces);
+  b.appendChild(f);
+
+  b.addEventListener('pointerdown', e => { e.stopPropagation(); popBubble(b); });
+  setTimeout(() => b.remove(), parseFloat(b.style.animationDuration) * 1000 + 500);
+  document.body.appendChild(b);
+}
+
+function popBubble(b) {
+  if (b.classList.contains('pop')) return;
+  b.classList.add('pop');
+  const r = b.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+
+  burst(cx, cy, 10, ['✨','⭐','💫','🌟','🌸']);
+  showPraise(cx, cy - r.width*0.3, pick(['真棒！','哇～','好耶！','啵！','厉害！','嘻嘻','太棒啦','再来一个！']));
+  BG.addScore(1);
+  chirp(500 + Math.random() * 300, Math.random() < 0.15);
+  vibrate(25);
+  setTimeout(() => b.remove(), 350);
+}
+
+// 点空白处：冒涟漪 + 小泡泡 + 音效
+document.addEventListener('pointerdown', e => {
+  if (!S.started || S.paused || S.over) return;
+  if (e.target.closest('#hud') || e.target.closest('#start') || e.target.closest('#endOverlay')) return;
+  if (BG.tooManyPointers()) return;
+
+  const rip = document.createElement('div');
+  const rs = 90 + Math.random() * 40;
+  rip.className = 'ripple';
+  rip.style.width = rip.style.height = rs + 'px';
+  rip.style.left = (e.clientX - rs/2) + 'px';
+  rip.style.top = (e.clientY - rs/2) + 'px';
+  document.body.appendChild(rip);
+  setTimeout(() => rip.remove(), 550);
+
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  const size = 70 + Math.random() * 50;
+  b.style.width = b.style.height = size + 'px';
+  b.style.left = (e.clientX - size/2) + 'px';
+  b.style.top = (e.clientY - size/2) + 'px';
+  b.style.background += ', radial-gradient(circle, ' + pick(colors) + ' 0 70%)';
+  b.style.animation = 'pop .4s ease-out forwards';
+  b.style.pointerEvents = 'none';
+  document.body.appendChild(b);
+  BG.playBlip();
+  vibrate(10);
+  setTimeout(() => b.remove(), 450);
+});
+
+// ---------- 结算 ----------
+function endGame() {
+  const stars = S.score >= 25 ? '⭐⭐⭐⭐⭐' : S.score >= 15 ? '⭐⭐⭐⭐' : S.score >= 8 ? '⭐⭐⭐' : S.score >= 3 ? '⭐⭐' : '⭐';
+  document.getElementById('endStars').textContent = stars;
+  document.getElementById('finalScore').textContent = S.score;
+  document.getElementById('endOverlay').style.display = 'flex';
+}
+</script>
+</body>
+</html>
