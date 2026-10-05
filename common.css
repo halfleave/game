@@ -67,6 +67,11 @@ body.paused * { animation-play-state: paused !important; }
 /* 暂停页里的大人开关：音乐 / 换背景（大圆角、无边框） */
 .pauseTools { display: flex; gap: 18px; margin-top: 8px; }
 .pauseTools .pill { font-size: clamp(24px, 5vw, 32px); padding: 18px 42px; border-radius: 30px; border: none; }
+/* 暂停页三按钮（🎵 🎨 🔄）宽度一致 */
+.pauseTools .pill, .pauseTools .toStartBtn {
+  width: clamp(96px, 22vw, 128px); padding: 18px 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 
 /* 结算页 */
 #endOverlay { position: fixed; inset: 0; z-index: 45; background: rgba(250,247,242,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; padding: 24px; }
@@ -88,3 +93,39 @@ body.paused * { animation-play-state: paused !important; }
 #start .demo { font-size: clamp(70px, 16vw, 120px); animation: bob 1.6s ease-in-out infinite; }
 #startBtn { font-family: inherit; border: none; cursor: pointer; background: linear-gradient(180deg, #8CCDB0, #6BB595); color: #fff; font-size: clamp(26px, 5.5vw, 38px); font-weight: 800; letter-spacing: 3px; padding: 20px 66px; border-radius: 999px; box-shadow: 0 8px 20px rgba(0,0,0,.18); }
 #startBtn:active { transform: scale(.95); }
+
+/* 覆盖层（开始页/暂停页/结算页）左上角的回主页按钮 */
+.homeBtn { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 14px; z-index: 5; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 999px; padding: 12px 26px; font-size: 26px; font-weight: 700; color: #5A4632; text-decoration: none; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+.homeBtn:active { transform: scale(.94); }
+/* 置顶版回主页按钮：common.js 注入的独立图层，盖过所有覆盖层 */
+#topHome { position: fixed; z-index: 60; }
+
+/* 结算页「再玩一次」前 3 秒置灰 */
+#againBtn:disabled { opacity: .45; box-shadow: none; }
+
+/* 开始页设置按钮 + 面板（大人用：音乐 / 背景 / 时长） */
+#settingsBtn { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px; z-index: 5; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 999px; padding: 12px 26px; font-size: 26px; font-weight: 700; color: #5A4632; border: none; font-family: inherit; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+#settingsBtn:active { transform: scale(.94); }
+#settingsPanel { position: fixed; inset: 0; z-index: 55; background: rgba(250,247,242,.82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; }
+#settingsPanel .card { background: rgba(255,255,255,.96); border-radius: 36px; padding: clamp(24px, 5vw, 40px) clamp(26px, 6vw, 52px); box-shadow: 0 14px 44px rgba(90,70,50,.12); display: flex; flex-direction: column; gap: 18px; max-width: 86vw; }
+#settingsPanel h3 { font-size: clamp(24px, 5vw, 32px); color: #5A4632; text-align: center; }
+.setRow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.setRow .lab { font-size: clamp(18px, 3.6vw, 22px); font-weight: 800; color: #7A6A55; min-width: 4.6em; }
+.seg { font-family: inherit; border: none; cursor: pointer; background: #F1EBE2; color: #7A6A55; font-size: clamp(16px, 3.4vw, 20px); font-weight: 700; padding: 10px 20px; border-radius: 999px; }
+.seg.on { background: #8CCDB0; color: #fff; box-shadow: 0 4px 12px rgba(107,181,149,.35); }
+#setClose { font-family: inherit; border: none; cursor: pointer; background: linear-gradient(180deg, #8CCDB0, #6BB595); color: #fff; font-size: clamp(20px, 4vw, 26px); font-weight: 800; padding: 12px 46px; border-radius: 999px; align-self: center; box-shadow: 0 6px 16px rgba(0,0,0,.15); margin-top: 4px; }
+#setClose:active { transform: scale(.95); }
+
+/* 窄屏：置顶 🏠 与 ⚙️ 跟顶栏按钮同步缩小，保持五者同高 */
+@media (max-width: 520px) {
+  .homeBtn, #settingsBtn { font-size: 17px; padding: 8px 14px; }
+}
+
+/* 暂停页 / 结算页的「回到开始页」按钮（与 🏠 主页区分） */
+.pauseTools { flex-wrap: wrap; justify-content: center; }
+.toStartBtn { font-family: inherit; border: none; cursor: pointer; border-radius: 999px; font-weight: 700; }
+/* 结算页按钮排：「再玩一次」+ 🔄 同排同底色 */
+.endBtnRow { display: flex; gap: 16px; justify-content: center; align-items: center; }
+.pauseTools .toStartBtn { font-size: clamp(24px, 5vw, 32px); border-radius: 30px; }
+#endOverlay .toStartBtn { font-size: clamp(22px, 4.5vw, 28px); padding: 16px 26px; background: #F9DCE6; color: #B25D7E; box-shadow: 0 6px 16px rgba(232,140,168,.25); }
+.toStartBtn:active { transform: scale(.95); }

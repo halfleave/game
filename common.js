@@ -24,8 +24,8 @@
   document.addEventListener('pointercancel', e => activePointers.delete(e.pointerId), true);
   function tooManyPointers() { return activePointers.size > MAX_POINTERS; }
 
-  // 全局状态
-  const DURATION = window.GAME_DURATION || 60;
+  // 全局状态（DURATION 可被开始页的设置面板修改）
+  let DURATION = window.GAME_DURATION || 60;
   const state = { started: false, paused: false, over: false, timeLeft: DURATION, score: 0 };
   const hooks = window.GameHooks || {};
 
@@ -116,26 +116,33 @@
   }
 
   // ---------- 顶栏按钮 ----------
-
   const musicBtn = document.getElementById('musicBtn');
-  if (musicBtn) {
-    musicBtn.addEventListener('pointerdown', () => {
-      musicOn = !musicOn;
-      musicBtn.classList.toggle('off', !musicOn);
-      if (musicOn && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    });
+  function setMusic(on) {
+    musicOn = on;
+    if (musicBtn) musicBtn.classList.toggle('off', !musicOn);
+    if (musicOn && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    syncSettingsUI();
   }
+  if (musicBtn) musicBtn.addEventListener('pointerdown', () => setMusic(!musicOn));
 
   const themeBtn = document.getElementById('themeBtn');
-  if (themeBtn) {
-    const themes = ['', 'theme-b', 'theme-c'];
-    let themeIdx = 2;   // 默认星夜（与页面 body class 保持一致）
-    themeBtn.addEventListener('pointerdown', () => {
-      themeIdx = (themeIdx + 1) % themes.length;
-      document.body.classList.remove('theme-b', 'theme-c');
-      if (themeIdx) document.body.classList.add(themes[themeIdx]);
-    });
+  const themes = ['', 'theme-b', 'theme-c'];
+  let themeIdx = 2;   // 默认星夜（与页面 body class 保持一致）
+  function setTheme(i) {
+    themeIdx = ((i % themes.length) + themes.length) % themes.length;
+    document.body.classList.remove('theme-b', 'theme-c');
+    if (themeIdx) document.body.classList.add(themes[themeIdx]);
+    syncSettingsUI();
   }
+  if (themeBtn) themeBtn.addEventListener('pointerdown', () => setTheme(themeIdx + 1));
+
+  // 左上角回主页按钮：独立置顶图层（开始页/暂停页/结算页都盖得住，随时可点）
+  const topHome = document.createElement('a');
+  topHome.id = 'topHome';
+  topHome.className = 'homeBtn';
+  topHome.href = 'index.html';
+  topHome.textContent = '🏠';
+  document.body.appendChild(topHome);
 
   // ---------- 暂停（遮罩不可点，仅 ⏸/▶ 恢复） ----------
   const pauseBtn = document.getElementById('pauseBtn');
@@ -206,6 +213,69 @@
     });
   }
 
+  // 结算页「再玩一次」初始 3 秒置灰，防止宝宝乱点直接跳过结算
+  const endOv = document.getElementById('endOverlay');
+  if (againBtn && endOv) {
+    let lockTimer = null;
+    const lockAgain = () => {
+      againBtn.disabled = true;
+      clearTimeout(lockTimer);
+      lockTimer = setTimeout(() => { againBtn.disabled = false; }, 3000);
+    };
+    new MutationObserver(() => {
+      if (endOv.style.display && endOv.style.display !== 'none') lockAgain();
+    }).observe(endOv, { attributes: true, attributeFilter: ['style'] });
+  }
+
+  // ---------- 开始页设置面板（大人用）：音乐 / 背景 / 时长 ----------
+  let settingsPanel = null;
+  function syncSettingsUI() {
+    if (!settingsPanel) return;
+    const mb = settingsPanel.querySelector('#setMusicBtn');
+    if (mb) { mb.textContent = musicOn ? '🎵 音乐：开' : '🎵 音乐：关'; mb.classList.toggle('on', musicOn); }
+    settingsPanel.querySelectorAll('[data-theme]').forEach(b => b.classList.toggle('on', Number(b.dataset.theme) === themeIdx));
+    settingsPanel.querySelectorAll('[data-dur]').forEach(b => b.classList.toggle('on', Number(b.dataset.dur) === DURATION));
+  }
+  if (startEl) {
+    const gear = document.createElement('button');
+    gear.id = 'settingsBtn';
+    gear.textContent = '⚙️';
+    gear.addEventListener('pointerdown', e => { e.stopPropagation(); settingsPanel.style.display = 'flex'; syncSettingsUI(); });
+    startEl.appendChild(gear);
+
+    settingsPanel = document.createElement('div');
+    settingsPanel.id = 'settingsPanel';
+    settingsPanel.innerHTML =
+      '<div class="card">' +
+        '<h3>设置</h3>' +
+        '<div class="setRow"><span class="lab">🎵 音乐</span><button class="seg" id="setMusicBtn">🎵 音乐：开</button></div>' +
+        '<div class="setRow"><span class="lab">🎨 背景</span>' +
+          '<button class="seg" data-theme="2">星夜</button>' +
+          '<button class="seg" data-theme="0">晨雾</button>' +
+          '<button class="seg" data-theme="1">樱花</button></div>' +
+        '<div class="setRow"><span class="lab">⏱ 时长</span>' +
+          '<button class="seg" data-dur="60">60 秒</button>' +
+          '<button class="seg" data-dur="120">120 秒</button>' +
+          '<button class="seg" data-dur="180">180 秒</button>' +
+          '<button class="seg" data-dur="300">300 秒</button></div>' +
+        '<button id="setClose">好啦</button>' +
+      '</div>';
+    document.body.appendChild(settingsPanel);
+
+    settingsPanel.querySelector('#setMusicBtn').addEventListener('pointerdown', e => { e.stopPropagation(); setMusic(!musicOn); });
+    settingsPanel.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); setTheme(Number(b.dataset.theme)); }));
+    settingsPanel.querySelectorAll('[data-dur]').forEach(b => b.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      DURATION = Number(b.dataset.dur);
+      state.timeLeft = DURATION;
+      updateTimer();
+      syncSettingsUI();
+      tone(660, { vol: .15, dur: .12 });
+    }));
+    settingsPanel.querySelector('#setClose').addEventListener('pointerdown', e => { e.stopPropagation(); settingsPanel.style.display = 'none'; });
+    syncSettingsUI();
+  }
+
   // ---------- 加分 ----------
   function addScore(n) {
     state.score += n;
@@ -222,4 +292,29 @@
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
+
+  // ---------- 暂停页 / 结算页的「回到开始页」按钮（与 🏠 主页区分：整页刷新回到当前游戏的开始画面） ----------
+  const goStartPage = () => location.reload();
+  if (pauseOverlay) {
+    const b = document.createElement('button');
+    b.className = 'toStartBtn';
+    b.textContent = '🔄';
+    b.title = '回到开始页';
+    b.addEventListener('pointerdown', e => { e.stopPropagation(); goStartPage(); });
+    const tools = pauseOverlay.querySelector('.pauseTools');
+    if (tools) tools.appendChild(b); else pauseOverlay.appendChild(b);
+  }
+  if (endOv && againBtn) {
+    // 把「再玩一次」和 🔄 包进同一排
+    const row = document.createElement('div');
+    row.className = 'endBtnRow';
+    againBtn.parentNode.insertBefore(row, againBtn);
+    row.appendChild(againBtn);
+    const b2 = document.createElement('button');
+    b2.className = 'toStartBtn';
+    b2.textContent = '🔄';
+    b2.title = '回到开始页';
+    b2.addEventListener('pointerdown', e => { e.stopPropagation(); goStartPage(); });
+    row.appendChild(b2);
+  }
 })();

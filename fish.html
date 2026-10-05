@@ -55,7 +55,7 @@
 <div id="ground"></div>
 
 <div id="hud">
-  <a class="pill iconBtn" id="homeBtn" href="index.html" style="text-decoration:none;color:inherit" title="回主页">🏠</a>
+  <div></div>
   <div class="hudMid">
   <div class="pill" id="scorePill">⭐ <span id="score">0</span></div>
   <div class="pill" id="timerPill">⏱ <span id="timer">60</span></div>
@@ -197,33 +197,38 @@ function spawnFish(force) {
     if (dashing) return;
     dashing = true;
     const totalPx = window.innerWidth * 1.18;   // 与 --dx 的 118vw 一致
+    const speed = totalPx / dur;                // 原匀速游动的线速度（px/ms）
     const tr = getComputedStyle(f).transform;
     let curX = 0;
     if (tr && tr !== 'none') {
       const parts = tr.match(/matrix\(([^)]+)\)/);
       if (parts) curX = parseFloat(parts[1].split(',')[4]) || 0;
     }
-    const progress = Math.min(Math.abs(curX) / totalPx, 0.99);
-    const remForward = totalPx * (1 - progress);   // 前方还剩多少路
-    const dashPx = totalPx * 0.22;                 // 冲一小段
-    const turn = remForward < dashPx * 1.6;        // 前方快到头就掉头，防止冲出屏幕
+    const remForward = Math.abs(totalPx * dir - curX);   // 前方到原终点还剩多少路
+    const dashPx = totalPx * 0.22;                       // 冲一小段
+    const turn = remForward < dashPx * 1.6;              // 前方快到头就掉头，防止冲出屏幕
     const sign = turn ? -dir : dir;
-    if (turn) bob.classList.toggle('flip');        // 掉头换个方向游
-    // 停掉原匀速游动，接管位移
-    f.style.animation = 'none';
+    if (turn) bob.classList.toggle('flip');              // 掉头换个方向游
     const dashDur = 480;
+    const afterDashX = curX + sign * dashPx;
+    // 先把当前位置写进基础样式，再停 CSS 动画、取消旧的接管动画 —— 防止闪回起点造成残影
+    f.style.transform = 'translateX(' + curX + 'px)';
+    f.style.animation = 'none';
+    f.getAnimations().forEach(a => a.cancel());
     f.animate(
-      [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + (curX + sign * dashPx) + 'px)' }],
+      [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + afterDashX + 'px)' }],
       { duration: dashDur, easing: 'ease-out', fill: 'forwards' }
     );
-    // 冲完接着以原速游到终点（保持和原来一样的线速度）
+    // 冲完以原来的线速度游到终点：剩余距离 ÷ 原速度 = 剩余时间，速度和躲闪前完全一致
     const endX = totalPx * dir;
-    const afterDashX = curX + sign * dashPx;
-    const remainMs = Math.max(600, dur * (1 - progress) - dashDur);
+    const remainMs = Math.max(250, Math.abs(endX - afterDashX) / speed);
     f.animate(
       [{ transform: 'translateX(' + afterDashX + 'px)' }, { transform: 'translateX(' + endX + 'px)' }],
       { duration: remainMs, easing: 'linear', fill: 'forwards', delay: dashDur }
     );
+    // 移除时间跟着实际路程走（掉头后路程变长，固定定时器会让鱼游一半就消失）
+    clearTimeout(removeTimer);
+    removeTimer = setTimeout(removeFish, dashDur + remainMs + 300);
     setTimeout(() => { dashing = false; }, dashDur + 120);
   }
 
@@ -265,12 +270,14 @@ function spawnFish(force) {
           if (parts) curX = parseFloat(parts[1].split(',')[4]) || 0;
         }
         const dashPx = (dir === 1 ? 1.25 : -1.25) * window.innerWidth;
-        if (f.animate) {
-          f.animate(
-            [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + (curX + dashPx) + 'px)' }],
-            { duration: 420, easing: 'ease-in', fill: 'forwards' }
-          );
-        }
+        // 同样先把当前位置写进基础样式、清掉旧动画再接管，防止闪回起点的残影
+        f.style.transform = 'translateX(' + curX + 'px)';
+        f.style.animation = 'none';
+        f.getAnimations().forEach(a => a.cancel());
+        f.animate(
+          [{ transform: 'translateX(' + curX + 'px)' }, { transform: 'translateX(' + (curX + dashPx) + 'px)' }],
+          { duration: 420, easing: 'ease-in', fill: 'forwards' }
+        );
         tone(400, { type: 'triangle', slide: 900, dur: .25, vol: .15 });
         vibrate(8);
         setTimeout(removeFish, 600);
@@ -297,7 +304,7 @@ function spawnFish(force) {
   liveCount++;
   let removed = false;   // 防止自然到点与被抓/溜走的定时器重复扣减
   const removeFish = () => { if (removed) return; removed = true; liveCount--; f.remove(); };
-  setTimeout(removeFish, dur + 300);
+  let removeTimer = setTimeout(removeFish, dur + 300);
 }
 
 // 点空白处：水花涟漪
